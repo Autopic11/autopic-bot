@@ -4,7 +4,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-FILE_PATH = os.getenv("ONEDRIVE_FILE_PATH", "AUTOPIC/DOCUMENTACIÓN/inventario.xlsx")
+FILE_PATH = os.getenv("ONEDRIVE_FILE_PATH", "AUTOPIC/DOCUMENTACIÓN/INVENTARIO_GENERAL_PRUEBA.xlsx")
 CLIENT_ID = os.getenv("MS_CLIENT_ID")
 REFRESH_TOKEN = os.getenv("MS_REFRESH_TOKEN")
 CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET", "")
