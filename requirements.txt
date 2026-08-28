@@ -1,3 +1,4 @@
-   Flask
-   requests
-   openpyxl
+Flask
+requests
+openpyxl
+gunicorn
