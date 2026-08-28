@@ -44,7 +44,7 @@ def upload_excel(access_token, content_bytes):
 def home():
     return f"Autopic Bot corriendo! Archivo: {FILE_PATH} Hoja: {SHEET_NAME}"
 
-@app.route('/agregar', methods=['GET', 'POST'])
+@app.route("/agregar", methods=["GET", "POST"])
 def agregar():
     try:
         data = request.json
