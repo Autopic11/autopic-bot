@@ -214,6 +214,13 @@ def webhook():
 @app.route('/')
 def home():
     return f"AUTOPIC BOT ACTIVO - PHONE_ID {PHONE_ID} - FILE {ONEDRIVE_FILE_PATH} - TOKEN OK? {bool(WHATSAPP_TOKEN)}"
+    @app.route('/test')
+def test():
+    numero_prueba = request.args.get('numero') # tu numero con lada ej 521333...
+    if not numero_prueba:
+        return "Pon ?numero=521..."
+    enviar_texto(numero_prueba, "✅ PRUEBA AUTOPIC - Si lees esto, tu TOKEN y PHONE_ID están perfectos.")
+    return f"Enviando prueba a {numero_prueba}, revisa tu WhatsApp y luego los Logs de Render"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
