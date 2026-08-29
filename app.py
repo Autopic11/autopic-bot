@@ -214,7 +214,7 @@ def webhook():
 @app.route('/')
 def home():
     return f"AUTOPIC BOT ACTIVO - PHONE_ID {PHONE_ID} - FILE {ONEDRIVE_FILE_PATH} - TOKEN OK? {bool(WHATSAPP_TOKEN)}"
-    @app.route('/test')
+@app.route('/test')
 def test():
     numero_prueba = request.args.get('numero') # tu numero con lada ej 521333...
     if not numero_prueba:
