@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 # --- CONFIGURACIÓN - PON ESTO EN RENDER ENV ---
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
-PHONE_ID = os.environ.get("PHONE_ID")
+PHONE_ID = os.environ.get("PHONE_ID")or os.environ.get("PHONE_NUMBER_ID")
 VERIFY_TOKEN = "autopic123"
 MS_TOKEN = os.environ.get("MS_TOKEN")
 DRIVE_ID = os.environ.get("DRIVE_ID")
