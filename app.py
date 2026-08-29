@@ -5,7 +5,6 @@ import time
 
 app = Flask(__name__)
 
-# --- CORREGIDO: Lee todas las variantes ---
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "").strip()
 PHONE_ID = (os.environ.get("PHONE_ID") or os.environ.get("PHONE_NUMBER_ID") or "1265790226622285").strip()
 VERIFY_TOKEN = (os.environ.get("VERIFY_TOKEN") or "autopic123").strip()
@@ -52,7 +51,7 @@ sesiones = {}
 
 def enviar_texto(to, body):
     if not WHATSAPP_TOKEN or not PHONE_ID:
-        print(f"❌ FALTA TOKEN O PHONE_ID: TOKEN existe? {bool(WHATSAPP_TOKEN)} PHONE_ID={PHONE_ID}")
+        print(f"❌ FALTA TOKEN O PHONE_ID")
         return None
     url = f"https://graph.facebook.com/v20.0/{PHONE_ID}/messages"
     headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
@@ -62,15 +61,19 @@ def enviar_texto(to, body):
     return r
 
 def enviar_botones(to, texto, botones):
+    # Intenta con botones, si falla manda texto
     url = f"https://graph.facebook.com/v20.0/{PHONE_ID}/messages"
     headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
-    btns = [{"type": "reply", "reply": {"id": b["id"], "title": b["title"]}} for b in botones]
+    btns = [{"type": "reply", "reply": {"id": b["id"], "title": b["title"][:20]}} for b in botones]
     payload = {
         "messaging_product": "whatsapp", "to": to, "type": "interactive",
         "interactive": {"type": "button", "body": {"text": texto}, "action": {"buttons": btns}}
     }
     r = requests.post(url, headers=headers, json=payload)
     print(f"-> BOTONES a {to}: {r.status_code} {r.text[:800]}")
+    if r.status_code!= 200:
+        # Fallback a texto si el botón falla
+        enviar_texto(to, texto + "\n\nResponde: BUSCAR, AGREGAR o FOLIOS")
     return r
 
 def get_excel(hoja):
@@ -98,22 +101,6 @@ def buscar_producto(hoja, modelo):
             return {"fila": idx, "encabezados": encabezados, "datos": fila}
     return None
 
-def escribir_fila(hoja, fila_num, array_valores):
-    try:
-        encoded_path = ONEDRIVE_FILE_PATH.replace(" ", "%20")
-        col_fin = chr(64 + len(array_valores))
-        rango = f"A{fila_num}:{col_fin}{fila_num}"
-        url = f"https://graph.microsoft.com/v1.0/me/drive/root:/{encoded_path}:/workbook/worksheets/{hoja}/range(address='{rango}')"
-        h = get_headers_graph()
-        h["Content-Type"] = "application/json"
-        body = {"values": [array_valores]}
-        r = requests.patch(url, headers=h, json=body, timeout=20)
-        print(f"ESCRIBIR {hoja} FILA {fila_num}: {r.status_code} {r.text[:800]}")
-        return r.status_code in [200,201]
-    except Exception as e:
-        print(f"ERROR escribir: {e}")
-        return False
-
 @app.route('/webhook', methods=['GET','POST'])
 def webhook():
     if request.method == 'GET':
@@ -126,27 +113,28 @@ def webhook():
     try:
         entry = data['entry'][0]['changes'][0]['value']
         if 'messages' not in entry:
+            print("No es mensaje, es status")
             return "ok", 200
         msg = entry['messages'][0]
         de = msg['from']
         texto = msg.get('text', {}).get('body', '').strip()
         texto_up = texto.upper()
         btn_id = msg.get('interactive', {}).get('button_reply', {}).get('id', '')
+        print(f"MENSAJE de {de}: texto={texto} btn={btn_id}")
 
-        # --- CORREGIDO: AHORA CONTESTA A HOLA, INVENTARIO, INVENT, O CUALQUIER COSA ---
-        if any(x in texto_up for x in ['INVENTARIO', 'HOLA', 'MENU', 'INVENT', 'AYUDA']) or btn_id == 'menu_principal' or texto_up == '':
-            # Si manda cualquier cosa sin sesion, lo mandamos al menu
+        # MENU PRINCIPAL - CONTESTA A TODO
+        if any(x in texto_up for x in ['INVENTARIO', 'HOLA', 'MENU', 'INVENT', 'AYUDA']) or btn_id == 'menu_principal' or texto_up == '' or len(texto_up) < 5:
             sesiones[de] = {"estado": "menu_principal"}
             enviar_botones(de, "🤖 *AUTOPIC INVENTARIO*\nElige una opción:", [
-                {"id":"opt_buscar","title":"🔍 BUSCAR"},
-                {"id":"opt_agregar","title":"➕ AGREGAR"},
-                {"id":"opt_folios","title":"📄 FOLIOS"}
+                {"id":"opt_buscar","title":"BUSCAR"},
+                {"id":"opt_agregar","title":"AGREGAR"},
+                {"id":"opt_folios","title":"FOLIOS"}
             ])
             return "ok", 200
 
         if btn_id == 'opt_buscar' or 'BUSCAR' in texto_up:
             sesiones[de] = {"estado":"esperando_hoja_buscar"}
-            enviar_botones(de, "🔍 ¿En qué hoja busco?", [
+            enviar_botones(de, "¿En qué hoja busco?", [
                 {"id":"hoja_GENERAL","title":"GENERAL"},
                 {"id":"hoja_DELTA","title":"DELTA"},
                 {"id":"hoja_PHOENIX CONTACT","title":"PHOENIX"}
@@ -154,26 +142,26 @@ def webhook():
             enviar_texto(de, "Más: Escribe CARLO para CARLO GAVAZZI")
         elif btn_id == 'opt_agregar':
             sesiones[de] = {"estado":"esperando_hoja_agregar"}
-            enviar_botones(de, "➕ ¿En qué hoja agrego?", [
+            enviar_botones(de, "¿En qué hoja agrego?", [
                 {"id":"agregar_GENERAL","title":"GENERAL"},
                 {"id":"agregar_DELTA","title":"DELTA"},
                 {"id":"agregar_PHOENIX CONTACT","title":"PHOENIX"}
             ])
         elif btn_id == 'opt_folios':
-            enviar_botones(de, "📄 *FOLIOS VENDIDOS*", [
-                {"id":"folios_buscar","title":"🔍 BUSCAR"},
-                {"id":"folios_agregar","title":"➕ AGREGAR"}
+            enviar_botones(de, "FOLIOS VENDIDOS", [
+                {"id":"folios_buscar","title":"BUSCAR"},
+                {"id":"folios_agregar","title":"AGREGAR"}
             ])
         elif btn_id.startswith('hoja_') or texto_up == 'CARLO' or texto_up.startswith('HOJA'):
             hoja = btn_id.replace('hoja_','') if btn_id.startswith('hoja_') else ('CARLO GAVAZZI' if texto_up == 'CARLO' else texto.replace('HOJA','').strip() or 'GENERAL')
             sesiones[de] = {"estado":"esperando_modelo_buscar", "hoja": hoja}
-            enviar_texto(de, f"📝 En *{hoja}*\nINGRESA MODELO:")
+            enviar_texto(de, f"En *{hoja}*\nINGRESA MODELO:")
         elif sesiones.get(de,{}).get('estado') == 'esperando_modelo_buscar':
             hoja = sesiones[de]['hoja']
-            enviar_texto(de, f"⏳ Buscando *{texto}* en {hoja}...")
+            enviar_texto(de, f"Buscando *{texto}* en {hoja}...")
             res = buscar_producto(hoja, texto)
             if res:
-                detalle = f"✅ *ENCONTRADO EN {hoja} FILA {res['fila']}*\n\n"
+                detalle = f"ENCONTRADO EN {hoja} FILA {res['fila']}\n\n"
                 for i, h in enumerate(res['encabezados']):
                     if i < len(res['datos']):
                         detalle += f"*{h}:* {res['datos'][i]}\n"
@@ -181,30 +169,7 @@ def webhook():
                 sesiones[de] = {"estado":"preguntar_descontar", "hoja": hoja, "fila": res['fila'], "datos": res['datos']}
                 enviar_botones(de, "¿DESCONTAR STOCK?", [{"id":"descontar_si","title":"SI"},{"id":"descontar_no","title":"NO"}])
             else:
-                enviar_texto(de, f"❌ *{texto}* NO EXISTE EN {hoja}\nEscribe otro modelo o escribe MENU")
-        elif btn_id == 'descontar_si':
-            sesiones[de]['estado'] = 'esperando_cantidad_descontar'
-            enviar_texto(de, "¿CUANTAS PIEZAS? (solo número)")
-        elif sesiones.get(de,{}).get('estado') == 'esperando_cantidad_descontar':
-            try:
-                cant = int(texto)
-                hoja = sesiones[de]['hoja']
-                fila = sesiones[de]['fila']
-                cant_actual = int(float(str(sesiones[de]['datos'][3]).replace(',','')))
-                if cant > cant_actual:
-                    enviar_texto(de, f"❌ Stock insuficiente: {cant_actual}")
-                else:
-                    nueva = cant_actual - cant
-                    encoded_path = ONEDRIVE_FILE_PATH.replace(" ", "%20")
-                    url = f"https://graph.microsoft.com/v1.0/me/drive/root:/{encoded_path}:/workbook/worksheets/{hoja}/range(address='D{fila}')"
-                    h = get_headers_graph(); h["Content-Type"]="application/json"
-                    requests.patch(url, headers=h, json={"values":[[nueva]]}, timeout=20)
-                    enviar_texto(de, f"✅ Descontado. Nuevo stock {hoja}: {nueva}")
-                    sesiones[de] = {"estado": "menu_principal"}
-            except:
-                enviar_texto(de, "Escribe solo número. Ej: 2")
-        elif btn_id == 'descontar_no':
-            enviar_botones(de, "Menú principal:", [{"id":"opt_buscar","title":"🔍 BUSCAR"},{"id":"opt_agregar","title":"➕ AGREGAR"},{"id":"opt_folios","title":"📄 FOLIOS"}])
+                enviar_texto(de, f"❌ *{texto}* NO EXISTE EN {hoja}\nEscribe otro modelo o MENU")
 
     except Exception as e:
         print(f"ERROR WEBHOOK: {e}")
@@ -213,14 +178,15 @@ def webhook():
 
 @app.route('/')
 def home():
-    return f"AUTOPIC BOT ACTIVO - PHONE_ID {PHONE_ID} - FILE {ONEDRIVE_FILE_PATH} - TOKEN OK? {bool(WHATSAPP_TOKEN)}"
+    return f"AUTOPIC BOT ACTIVO - PHONE_ID {PHONE_ID} - TOKEN OK? {bool(WHATSAPP_TOKEN)}"
+
 @app.route('/test')
 def test():
-    numero_prueba = request.args.get('numero') # tu numero con lada ej 521333...
+    numero_prueba = request.args.get('numero')
     if not numero_prueba:
-        return "Pon ?numero=521..."
-    enviar_texto(numero_prueba, "✅ PRUEBA AUTOPIC - Si lees esto, tu TOKEN y PHONE_ID están perfectos.")
-    return f"Enviando prueba a {numero_prueba}, revisa tu WhatsApp y luego los Logs de Render"
+        return "Pon?numero=521..."
+    enviar_texto(numero_prueba, "✅ PRUEBA AUTOPIC - Bot activo")
+    return f"Enviando prueba a {numero_prueba}"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
